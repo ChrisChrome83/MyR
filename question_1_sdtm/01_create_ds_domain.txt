@@ -1,0 +1,12 @@
+G3;Installing packages into ‘/cloud/lib/x86_64-pc-linux-gnu-library/4.5’
+(as ‘lib’ is unspecified)
+gtrying URL 'http://rspm/default/__linux__/noble/latest/src/contrib/admiral_1.4.1.tar.gz'
+trying URL 'http://rspm/default/__linux__/noble/latest/src/contrib/sdtm.oak_0.2.0.tar.gz'
+trying URL 'http://rspm/default/__linux__/noble/latest/src/contrib/pharmaverseraw_0.1.1.tar.gz'
+trying URL 'http://rspm/default/__linux__/noble/latest/src/contrib/dplyr_1.2.0.tar.gz'
+trying URL 'http://rspm/default/__linux__/noble/latest/src/contrib/tidyverse_2.0.0.tar.gz'
+trying URL 'http://rspm/default/__linux__/noble/latest/src/contrib/lubridate_1.9.5.tar.gz'
+trying URL 'http://rspm/default/__linux__/noble/latest/src/contrib/labelled_2.16.0.tar.gz'
+
+The downloaded source packages are in
+	‘/tmp/RtmpDyzlcc/downloaded_packages’
