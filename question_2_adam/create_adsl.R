@@ -1,1 +1,127 @@
+# Install required packages
+install.packages(c("admiral", "pharmaversesdtm", "dplyr", "tidyverse", "lubridate", "labelled"))
+library("dplyr")
+library("admiral")
+library("pharmaversesdtm")
+library("tidyverse")
+library("lubridate")
+library("labelled")
 
+# Bring in SDTM data
+dm <- pharmaversesdtm::dm
+vc <- pharmaversesdtm::vs
+ex <- pharmaversesdtm::ex
+ds <- pharmaversesdtm::ds
+ae <- pharmaversesdtm::ae
+
+# Create age grouping lookup
+agegr9_lookup <- exprs(
+  ~condition,            ~AGEGR9, ~AGEGR9N,
+  is.na(AGE),                 NA,        NA,
+  AGE < 18,                "<18",        1,
+  between(AGE, 18, 50),  "18-50",        2,
+  !is.na(AGE),             ">50",        3
+)
+
+# Keep only required variables from DM and add ITT flag and age group variables
+dm1 <-dm %>%
+    mutate(ITTFL=!is.na(ARM), "Y", "N") %>%
+    select(c(STUDYID, USUBJID, SUBJID, AGE, AGEU, SEX, RACE, ARM, ACTARM, ITTFL)) %>%
+    derive_vars_cat(
+      dataset = .,
+      definition = agegr9_lookup) 
+
+
+# Cut down treatment dataset, keep only valid records and required vars
+ex1 <- ex %>%
+    filter(EXDOSE > 0 | (EXDOSE==0 & grepl("PLACEBO", EXTRT, ignore.case = TRUE))) %>%
+    filter(nchar(EXSTDTC)>=10) %>%
+    select(c(STUDYID, USUBJID, EXSTDTC, EXENDTC)) 
+
+# Get date of first treatment
+ex2 <-ex1  %>%
+  derive_vars_dtm(
+  dtc = EXSTDTC,
+  new_vars_prefix = "TRTS",
+  highest_imputation = "h",   # Required to allow time imputation
+  date_imputation = "first",
+  time_imputation = "first") %>%
+  derive_vars_dtm_to_dt(source_vars = exprs(TRTSDTM))  %>% # Convert Datetime variables to date
+  group_by(USUBJID) %>%
+  arrange(TRTSDTM) %>%
+  slice(1) %>%
+  ungroup() %>%
+  select(c(STUDYID, USUBJID, TRTSDTM, TRTSTMF))
+
+# Get date of first treatment
+ex3 <-ex1  %>%
+  derive_vars_dt(
+    dtc = EXENDTC,
+    new_vars_prefix = "TRTE",
+    date_imputation = "first") %>%
+  group_by(USUBJID) %>%
+  arrange(TRTEDT) %>%
+  slice_tail(n=1) %>%
+  ungroup() %>%
+  select(c(STUDYID, USUBJID, TRTEDT))
+
+# Get last alive date
+lstdt <-dm1 %>%
+  derive_vars_extreme_event(
+    by_vars = exprs(STUDYID, USUBJID),
+    events = list(
+      event(
+        dataset_name = "vs",
+        order = exprs(VSDTC, VSSEQ),
+        condition = (!is.na(VSSTRESN) & !is.na(VSSTRESC) & !is.na(VSDTC)),
+        set_values_to = exprs(
+          LSTALVDT = convert_dtc_to_dt(VSDTC, highest_imputation = "M"),
+          seq = VSSEQ
+        ),
+      ),
+      event(
+        dataset_name = "ae",
+        order = exprs(AESTDTC, AESEQ),
+        condition = !is.na(AESTDTC),
+        set_values_to = exprs(
+          LSTALVDT = convert_dtc_to_dt(AESTDTC, highest_imputation = "M"),
+          seq = AESEQ
+        ),
+      ),
+      event(
+        dataset_name = "ds",
+        order = exprs(DSSTDTC, DSSEQ),
+        condition = !is.na(DSSTDTC),
+        set_values_to = exprs(
+          LSTALVDT = convert_dtc_to_dt(DSSTDTC, highest_imputation = "M"),
+          seq = DSSEQ
+        ),
+      ),
+      event(
+        dataset_name = "ex3",
+        condition = !is.na(TRTEDT),
+        set_values_to = exprs(LSTALVDT = TRTEDT, seq = 0),
+      )
+    ),
+    source_datasets = list(vs = vs, ae = ae, ds = ds, ex3 = ex3),
+    tmp_event_nr_var = event_nr,
+    order = exprs(LSTALVDT, seq, event_nr),
+    mode = "last",
+    new_vars = exprs(LSTALVDT)
+  )
+
+# Merge all together
+adsl<- left_join(lstdt, ex2, by=c("STUDYID", "USUBJID")) %>%
+        left_join(., ex3, by=c("STUDYID", "USUBJID")) %>%
+        select("STUDYID", "USUBJID", "SUBJID", "AGE", "AGEU", "SEX", "RACE", "ARM", "ACTARM", "ITTFL", "TRTSDTM", "TRTSTMF", "AGEGR9", "AGEGR9N") %>%
+        set_variable_labels(
+          ITTFL   = "Intent-To-Treat Population Flag",
+          TRTSDTM = "Datetime of First Exposure to Treatment",
+          TRTSTMF = "Time of First Exposure Imput. Flag",
+          AGEGR9  = "Pooled Age Group 9",
+          AGEGR9N = "Pooled Age Group 9 (N)"
+  )
+
+
+# Write out dataset
+saveRDS(adsl, "question_2_adam/adsl.rds")
