@@ -1,31 +1,18 @@
-# Start writing to log
-log_file <- file("question_1_sdtm/01_create_ds_domain.txt", open = "wt") 
-sink(log_file, type = "output")
-sink(log_file, type = "message")
-
-
-
 
 # Install required packages
-install.packages(c("admiral", "sdtm.oak", "pharmaverseraw", "dplyr", "tidyverse", "lubridate", "labelled"))
+install.packages(c("admiral", "sdtm.oak", "pharmaverseraw", "pharmaversesdtm", "dplyr", "tidyverse", "lubridate", "labelled"))
 library("dplyr")
 library("admiral")
 library("sdtm.oak")
 library("pharmaverseraw")
+library("pharmaversesdtm")
 library("tidyverse")
 library("lubridate")
 library("labelled")
 
-
 # Read in raw data
 ds_raw <- pharmaverseraw::ds_raw
-dm_raw <- pharmaverseraw::dm_raw
-
-# Create informed consent date from DM
-dm <- dm_raw %>%
-  mutate(USUBJID=str_c(str_trim(STUDY, side = "right"), "/", str_trim(PATNUM, side = "right"))) %>%
-  mutate(RFXSTDTC=as.character(format(mdy(IC_DT), "%Y-%m-%d"))) %>%
-  select(c(USUBJID, RFXSTDTC,IC_DT))
+dm <- pharmaversesdtm::dm
 
 # Generate Oak Id vars
 ds_raw1 <- ds_raw %>%
@@ -95,9 +82,3 @@ ds4 <- ds3 %>%
 
 # Write out dataset
 saveRDS(ds4, "question_1_sdtm/ds.rds")
-
-
-# Stop writing to log
-sink(type = "output")
-sink(type = "message")
-close(log_file)
